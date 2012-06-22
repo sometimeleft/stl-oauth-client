@@ -164,7 +164,7 @@ static const NSString *kOAuthVersion1_0 = @"1.0";
     NSMutableDictionary *oauthParams = [self mutableDictionaryWithOAuthInitialData];
     
     // adding oauth_ extra params to the header
-    NSArray *parameterComponents = [[request.URL parameterString] componentsSeparatedByString:@"&"];
+    NSArray *parameterComponents = [[request.URL query] componentsSeparatedByString:@"&"];
     NSMutableDictionary *parameters = [NSMutableDictionary dictionaryWithCapacity:[parameterComponents count]];
     for(NSString *component in parameterComponents) {
         NSArray *subComponents = [component componentsSeparatedByString:@"="];
