@@ -168,7 +168,9 @@ static const NSString *kOAuthVersion1_0 = @"1.0";
     NSMutableDictionary *parameters = [NSMutableDictionary dictionaryWithCapacity:[parameterComponents count]];
     for(NSString *component in parameterComponents) {
         NSArray *subComponents = [component componentsSeparatedByString:@"="];
-        [parameters setObject:[subComponents objectAtIndex:1] forKey:[subComponents objectAtIndex:0]];
+        if ([subComponents count] == 2) {
+            [parameters setObject:[subComponents objectAtIndex:1] forKey:[subComponents objectAtIndex:0]];
+        }
     }
     
     NSString *allParameters = [self stringWithOAuthParameters:oauthParams requestParameters:parameters];
