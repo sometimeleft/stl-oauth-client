@@ -230,7 +230,7 @@ static const NSString *kOAuthVersion1_0 = @"1.0";
         nonceBytes[i] = '0' + byte - 52;
     }
     
-    timestamp = [NSString stringWithFormat:@"%d", tv.tv_sec];
+    timestamp = [NSString stringWithFormat:@"%ld", tv.tv_sec];
     nonce = [NSString stringWithFormat:@"%.16s", nonceBytes];
   } while ((tv.tv_sec == last_timestamp) && [nonceHistory containsObject:nonce]);
   
