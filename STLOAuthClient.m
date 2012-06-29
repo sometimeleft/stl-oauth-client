@@ -43,70 +43,71 @@ static NSString* URLEncodeString(NSString *string);
 
 - (id) initWithBaseURL:(NSURL *)url;
 - (void) addGeneratedTimestampAndNonceInto:(NSMutableDictionary *)dictionary;
-- (NSString *) authorizationHeaderValueForMethod:(NSString *)method path:(NSString *)path parameters:(NSDictionary *)parameters;
+
+- (NSString *) authorizationHeaderValueForRequest:(NSURLRequest *)request;
 @end
 
 @implementation STLOAuthClient
 @synthesize consumerKey = _consumerKey, 
-         consumerSecret = _consumerSecret, 
-            tokenSecret = _tokenSecret, 
-        tokenIdentifier = _tokenIdentifier, 
-           signRequests = _signRequests, 
-                  realm = _realm;
+consumerSecret = _consumerSecret, 
+tokenSecret = _tokenSecret, 
+tokenIdentifier = _tokenIdentifier, 
+signRequests = _signRequests, 
+realm = _realm;
 
 - (id) initWithBaseURL:(NSURL *)url consumerKey:(NSString *)consumerKey secret:(NSString *)consumerSecret {
-  self = [super initWithBaseURL:url];
-  
-  if (self) {
-    self.signRequests = YES;
-    self.consumerKey = consumerKey;
-    self.consumerSecret = consumerSecret;
-  }
-  
-  return self;
+    self = [super initWithBaseURL:url];
+    
+    if (self) {
+        self.signRequests = YES;
+        self.consumerKey = consumerKey;
+        self.consumerSecret = consumerSecret;
+    }
+    
+    return self;
 }
 
 - (id) initWithBaseURL:(NSURL *)url {
-  return [self initWithBaseURL:url consumerKey:NULL secret:NULL];
+    return [self initWithBaseURL:url consumerKey:NULL secret:NULL];
 }
 
 - (void) setAccessToken:(NSString *)accessToken secret:(NSString *)secret {
-  self.tokenIdentifier = accessToken;
-  self.tokenSecret = secret;
+    self.tokenIdentifier = accessToken;
+    self.tokenSecret = secret;
 }
 
 - (void) setConsumerKey:(NSString *)consumerKey secret:(NSString *)secret {
-  self.consumerKey = consumerKey;
-  self.consumerSecret = secret;
+    self.consumerKey = consumerKey;
+    self.consumerSecret = secret;
 }
 
 - (NSMutableURLRequest *) requestWithMethod:(NSString *)method 
                                        path:(NSString *)path 
                                  parameters:(NSDictionary *)parameters {
-  
-  NSMutableURLRequest *request = [super requestWithMethod:method path:path parameters:parameters];
-  
-  if (self.signRequests) {
-    NSString *authorizationHeader = [self authorizationHeaderValueForMethod:method path:path parameters:parameters];
-    [request setValue:authorizationHeader forHTTPHeaderField:@"Authorization"];
-  }
-  
-  return request;
+    
+    NSMutableURLRequest *request = [super requestWithMethod:method path:path parameters:parameters];
+    
+    if (self.signRequests) {
+        NSString *authorizationHeader = [self authorizationHeaderValueForRequest:request];
+        [request setValue:authorizationHeader forHTTPHeaderField:@"Authorization"];
+    }
+    
+    return request;
 }
 
 - (NSURLRequest *) unsignedRequestWithMethod:(NSString *)method path:(NSString *)path parameters:(NSDictionary *)parameters {
-  NSMutableURLRequest *request = [super requestWithMethod:method path:path parameters:parameters];
-  
-  return request;
+    NSMutableURLRequest *request = [super requestWithMethod:method path:path parameters:parameters];
+    
+    return request;
 }
 
 - (NSURLRequest *) signedRequestWithMethod:(NSString *)method path:(NSString *)path parameters:(NSDictionary *)parameters {
-  NSMutableURLRequest *request = [super requestWithMethod:method path:path parameters:parameters];
-  
-  NSString *authorizationHeader = [self authorizationHeaderValueForMethod:method path:path parameters:parameters];
-  [request setValue:authorizationHeader forHTTPHeaderField:@"Authorization"];
-  
-  return request;
+    NSMutableURLRequest *request = [super requestWithMethod:method path:path parameters:parameters];
+    
+    NSString *authorizationHeader = [self authorizationHeaderValueForRequest:request];
+    [request setValue:authorizationHeader forHTTPHeaderField:@"Authorization"];
+    
+    return request;
 }
 
 #pragma mark - "private" methods.
@@ -121,78 +122,40 @@ static const NSString *kOAuthSignatureTypeHMAC_SHA1 = @"HMAC-SHA1";
 static const NSString *kOAuthVersion1_0 = @"1.0";
 
 - (NSMutableDictionary *) mutableDictionaryWithOAuthInitialData {
-  NSMutableDictionary *result = [NSMutableDictionary dictionaryWithObjectsAndKeys:
-                                 kOAuthSignatureTypeHMAC_SHA1, kOAuthSignatureMethodKey,
-                                 kOAuthVersion1_0, kOAuthVersionKey,
-                                 nil];
-  
-  if (self.consumerKey) [result setObject:self.consumerKey forKey:kOAuthConsumerKey];
-  if (self.tokenIdentifier) [result setObject:self.tokenIdentifier forKey:kOAuthTokenIdentifier];
-  
-  [self addGeneratedTimestampAndNonceInto:result];
-  
-  return  result;
+    NSMutableDictionary *result = [NSMutableDictionary dictionaryWithObjectsAndKeys:
+                                   kOAuthSignatureTypeHMAC_SHA1, kOAuthSignatureMethodKey,
+                                   kOAuthVersion1_0, kOAuthVersionKey,
+                                   nil];
+    
+    if (self.consumerKey) [result setObject:self.consumerKey forKey:kOAuthConsumerKey];
+    if (self.tokenIdentifier) [result setObject:self.tokenIdentifier forKey:kOAuthTokenIdentifier];
+    
+    [self addGeneratedTimestampAndNonceInto:result];
+    
+    return  result;
 }
 
 - (NSString *) stringWithOAuthParameters:(NSMutableDictionary *)oauthParams requestParameters:(NSDictionary *)parameters {
-  // UTF-8/URL Encoding of all parameters (oauth + request) 
-  NSMutableDictionary *params = [NSMutableDictionary dictionaryWithCapacity:[parameters count] + [oauthParams count]];
-  [parameters enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSString *obj, BOOL *stop) {
-    [params setObject:URLEncodeString(obj) forKey:URLEncodeString(key)];
-  }];
-  [oauthParams enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSString *obj, BOOL *stop) {
-    [params setObject:URLEncodeString(obj) forKey:URLEncodeString(key)];
-  }];
-  
-  // sorting parameters
-  NSArray *sortedKeys = [[params allKeys] sortedArrayUsingComparator:^NSComparisonResult(NSString *key1, NSString *key2) {
-    NSComparisonResult result = [key1 compare:key2 options:NSLiteralSearch];
-    if (result == NSOrderedSame)
-      result = [[params objectForKey:key1] compare:[params objectForKey:key2] options:NSLiteralSearch];
+    NSMutableDictionary *params = [NSMutableDictionary dictionaryWithDictionary:oauthParams];
+    [params addEntriesFromDictionary:parameters];
     
-    return result;
-  }];
-  
-  // join keys and values with =
-  NSMutableArray *longListOfParameters = [NSMutableArray arrayWithCapacity:[sortedKeys count]];
-  [sortedKeys enumerateObjectsUsingBlock:^(NSString *key, NSUInteger idx, BOOL *stop) {
-    [longListOfParameters addObject:[NSString stringWithFormat:@"%@=%@", key, [params objectForKey:key]]];
-  }];
-  
-  // join components with &
-  return [longListOfParameters componentsJoinedByString:@"&"];
-}
-
-- (NSString *) authorizationHeaderValueForMethod:(NSString *)method path:(NSString *)path parameters:(NSDictionary *)params {
-  NSURL *url = [NSURL URLWithString:path relativeToURL:self.baseURL];
-  NSString *fixedURL = [self baseURLforAddress:url];
-  NSMutableDictionary *oauthParams = [self mutableDictionaryWithOAuthInitialData];
- 
-  // adding oauth_ extra params to the header
-  NSMutableDictionary *parameters = [params mutableCopy];
-  
-  NSString *allParameters = [self stringWithOAuthParameters:oauthParams requestParameters:parameters];
-  // adding HTTP method and URL
-  NSString *signatureBaseString = [NSString stringWithFormat:@"%@&%@&%@", [method uppercaseString], URLEncodeString(fixedURL), URLEncodeString(allParameters)];
-  
-  NSString *signature = [self signatureForBaseString:signatureBaseString];
-  
-  // add to OAuth params
-  [oauthParams setObject:signature forKey:kOAuthSignatureKey];
-  
-  // build OAuth Authorization Header
-  NSMutableArray *headerParams = [NSMutableArray arrayWithCapacity:[oauthParams count]];
-  [oauthParams enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSString *obj, BOOL *stop) {
-    [headerParams addObject:[NSString stringWithFormat:@"%@=\"%@\"", key, URLEncodeString(obj)]];
-  }];
-  
-  // let's use the base URL if a realm was not set
-  NSString *oauthRealm = self.realm;
-  if (!oauthRealm) oauthRealm = [self baseURLforAddress:[self baseURL]];
-  
-  NSString *result = [NSString stringWithFormat:@"OAuth realm=\"%@\",%@", oauthRealm, [headerParams componentsJoinedByString:@","]];
-  
-  return result;
+    // sorting parameters
+    NSArray *sortedKeys = [[params allKeys] sortedArrayUsingComparator:^NSComparisonResult(NSString *key1, NSString *key2) {
+        NSComparisonResult result = [key1 compare:key2 options:NSLiteralSearch];
+        if (result == NSOrderedSame)
+            result = [[params objectForKey:key1] compare:[params objectForKey:key2] options:NSLiteralSearch];
+        
+        return result;
+    }];
+    
+    // join keys and values with =
+    NSMutableArray *longListOfParameters = [NSMutableArray arrayWithCapacity:[sortedKeys count]];
+    [sortedKeys enumerateObjectsUsingBlock:^(NSString *key, NSUInteger idx, BOOL *stop) {
+        [longListOfParameters addObject:[NSString stringWithFormat:@"%@=%@", key, [params objectForKey:key]]];
+    }];
+    
+    // join components with &
+    return [longListOfParameters componentsJoinedByString:@"&"];
 }
 
 //
@@ -258,20 +221,20 @@ static const NSString *kOAuthVersion1_0 = @"1.0";
 }
 
 - (NSString *) baseURLforAddress:(NSURL *)url {
-  NSAssert1([url host] != nil, @"URL host missing: %@", [url absoluteString]);
-  
-  // Port need only be present if it's not the default
-  NSString *hostString;
-  if (([url port] == nil)
-      || ([[[url scheme] lowercaseString] isEqualToString:@"http"] && ([[url port] integerValue] == 80))
-      || ([[[url scheme] lowercaseString] isEqualToString:@"https"] && ([[url port] integerValue] == 443))) {
-    hostString = [[url host] lowercaseString];
-  } else {
-    hostString = [NSString stringWithFormat:@"%@:%@", [[url host] lowercaseString], [url port]];
-  }
-  
-  NSString *pathString = (__bridge NSString *)CFURLCopyPath((__bridge CFURLRef)[url absoluteURL]);
-  return [NSString stringWithFormat:@"%@://%@%@", [[url scheme] lowercaseString], hostString, pathString];
+    NSAssert1([url host] != nil, @"URL host missing: %@", [url absoluteString]);
+    
+    // Port need only be present if it's not the default
+    NSString *hostString;
+    if (([url port] == nil)
+        || ([[[url scheme] lowercaseString] isEqualToString:@"http"] && ([[url port] integerValue] == 80))
+        || ([[[url scheme] lowercaseString] isEqualToString:@"https"] && ([[url port] integerValue] == 443))) {
+        hostString = [[url host] lowercaseString];
+    } else {
+        hostString = [NSString stringWithFormat:@"%@:%@", [[url host] lowercaseString], [url port]];
+    }
+    
+    NSString *pathString = (__bridge NSString *)CFURLCopyPath((__bridge CFURLRef)[url absoluteURL]);
+    return [NSString stringWithFormat:@"%@://%@%@", [[url scheme] lowercaseString], hostString, pathString];
 }
 
 @end
@@ -286,11 +249,11 @@ static const NSString *kOAuthVersion1_0 = @"1.0";
 //  Copyright 2011 Scott James Remnant <scott@netsplit.com>. All rights reserved.
 //
 static NSString *URLEncodeString(NSString *string) {
-  // See http://en.wikipedia.org/wiki/Percent-encoding and RFC3986
-  // Hyphen, Period, Understore & Tilde are expressly legal
-  const CFStringRef legalURLCharactersToBeEscaped = CFSTR("!*'();:@&=+$,/?#[]<>\"{}|\\`^% ");
-  
-  return (__bridge NSString *)CFURLCreateStringByAddingPercentEscapes(kCFAllocatorDefault, (__bridge CFStringRef)string, NULL, legalURLCharactersToBeEscaped, kCFStringEncodingUTF8);
+    // See http://en.wikipedia.org/wiki/Percent-encoding and RFC3986
+    // Hyphen, Period, Understore & Tilde are expressly legal
+    const CFStringRef legalURLCharactersToBeEscaped = CFSTR("!*'();:@&=+$,/?#[]<>\"{}|\\`^% ");
+    
+    return (__bridge NSString *)CFURLCreateStringByAddingPercentEscapes(kCFAllocatorDefault, (__bridge CFStringRef)string, NULL, legalURLCharactersToBeEscaped, kCFStringEncodingUTF8);
 }
 
 // The function below was inspired on
@@ -318,27 +281,27 @@ static NSString *URLEncodeString(NSString *string) {
 // THE SOFTWARE.
 //
 static NSString * Base64EncodedStringFromData(NSData *data) {
-  NSUInteger length = [data length];
-  NSMutableData *mutableData = [NSMutableData dataWithLength:((length + 2) / 3) * 4];
-  
-  uint8_t *input = (uint8_t *)[data bytes];
-  uint8_t *output = (uint8_t *)[mutableData mutableBytes];
-  
-  for (NSUInteger i = 0; i < length; i += 3) {
-    NSUInteger value = 0;
-    for (NSUInteger j = i; j < (i + 3); j++) {
-      value <<= 8;
-      if (j < length) value |= (0xFF & input[j]); 
+    NSUInteger length = [data length];
+    NSMutableData *mutableData = [NSMutableData dataWithLength:((length + 2) / 3) * 4];
+    
+    uint8_t *input = (uint8_t *)[data bytes];
+    uint8_t *output = (uint8_t *)[mutableData mutableBytes];
+    
+    for (NSUInteger i = 0; i < length; i += 3) {
+        NSUInteger value = 0;
+        for (NSUInteger j = i; j < (i + 3); j++) {
+            value <<= 8;
+            if (j < length) value |= (0xFF & input[j]); 
+        }
+        
+        static uint8_t const kAFBase64EncodingTable[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        
+        NSUInteger idx = (i / 3) * 4;
+        output[idx + 0] = kAFBase64EncodingTable[(value >> 18) & 0x3F];
+        output[idx + 1] = kAFBase64EncodingTable[(value >> 12) & 0x3F];
+        output[idx + 2] = (i + 1) < length ? kAFBase64EncodingTable[(value >> 6)  & 0x3F] : '=';
+        output[idx + 3] = (i + 2) < length ? kAFBase64EncodingTable[(value >> 0)  & 0x3F] : '=';
     }
     
-    static uint8_t const kAFBase64EncodingTable[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    
-    NSUInteger idx = (i / 3) * 4;
-    output[idx + 0] = kAFBase64EncodingTable[(value >> 18) & 0x3F];
-    output[idx + 1] = kAFBase64EncodingTable[(value >> 12) & 0x3F];
-    output[idx + 2] = (i + 1) < length ? kAFBase64EncodingTable[(value >> 6)  & 0x3F] : '=';
-    output[idx + 3] = (i + 2) < length ? kAFBase64EncodingTable[(value >> 0)  & 0x3F] : '=';
-  }
-  
-  return [[NSString alloc] initWithData:mutableData encoding:NSASCIIStringEncoding];
+    return [[NSString alloc] initWithData:mutableData encoding:NSASCIIStringEncoding];
 }
