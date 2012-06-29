@@ -158,66 +158,67 @@ static const NSString *kOAuthVersion1_0 = @"1.0";
     return [longListOfParameters componentsJoinedByString:@"&"];
 }
 
-//
-//  The following method is based on code from :
-//
-//  ASIHTTPRequest+OAuth.m
-//
-//  Created by Scott James Remnant on 6/1/11.
-//  Copyright 2011 Scott James Remnant <scott@netsplit.com>. All rights reserved.
-//
-- (void) addGeneratedTimestampAndNonceInto:(NSMutableDictionary *)dictionary {
-  static time_t last_timestamp = -1;
-  static NSMutableSet *nonceHistory = nil;
-  
-  // Make sure we never send the same timestamp and nonce
-  if (!nonceHistory)
-    nonceHistory = [[NSMutableSet alloc] init];
-  
-  struct timeval tv;
-  NSString *timestamp, *nonce;
-  do {
-    // Get the time of day, for both the timestamp and the random seed
-    gettimeofday(&tv, NULL);
+- (NSString *) authorizationHeaderValueForRequest:(NSURLRequest *)request {
+    NSURL *url = request.URL;
+    NSString *fixedURL = [self baseURLforAddress:url];
+    NSMutableDictionary *oauthParams = [self mutableDictionaryWithOAuthInitialData];
     
-    // Generate a random alphanumeric character sequence for the nonce
-    char nonceBytes[16];
-    srandom(tv.tv_sec | tv.tv_usec);
-    for (int i = 0; i < 16; i++) {
-      int byte = random() % 62;
-      if (byte < 26)
-        nonceBytes[i] = 'a' + byte;
-      else if (byte < 52)
-        nonceBytes[i] = 'A' + byte - 26;
-      else
-        nonceBytes[i] = '0' + byte - 52;
+    // adding oauth_ extra params to the header
+    NSArray *parameterComponents = [[request.URL query] componentsSeparatedByString:@"&"];
+    NSMutableDictionary *parameters = [NSMutableDictionary dictionaryWithCapacity:[parameterComponents count]];
+    for(NSString *component in parameterComponents) {
+        NSArray *subComponents = [component componentsSeparatedByString:@"="];
+        if ([subComponents count] == 2) {
+            [parameters setObject:[subComponents objectAtIndex:1] forKey:[subComponents objectAtIndex:0]];
+        }
     }
     
-    timestamp = [NSString stringWithFormat:@"%d", tv.tv_sec];
-    nonce = [NSString stringWithFormat:@"%.16s", nonceBytes];
-  } while ((tv.tv_sec == last_timestamp) && [nonceHistory containsObject:nonce]);
-  
-  if (tv.tv_sec != last_timestamp) {
-    last_timestamp = tv.tv_sec;
-    [nonceHistory removeAllObjects];
-  }
-  [nonceHistory addObject:nonce];
-  
-  [dictionary setObject:nonce forKey:@"oauth_nonce"];
-  [dictionary setObject:timestamp forKey:@"oauth_timestamp"];
+    NSString *allParameters = [self stringWithOAuthParameters:oauthParams requestParameters:parameters];
+    // adding HTTP method and URL
+    NSString *signatureBaseString = [NSString stringWithFormat:@"%@&%@&%@", [request.HTTPMethod uppercaseString], URLEncodeString(fixedURL), URLEncodeString(allParameters)];
+    
+    NSString *signature = [self signatureForBaseString:signatureBaseString];
+    
+    // add to OAuth params
+    [oauthParams setObject:signature forKey:kOAuthSignatureKey];
+    
+    // build OAuth Authorization Header
+    NSMutableArray *headerParams = [NSMutableArray arrayWithCapacity:[oauthParams count]];
+    [oauthParams enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSString *obj, BOOL *stop) {
+        [headerParams addObject:[NSString stringWithFormat:@"%@=\"%@\"", key, URLEncodeString(obj)]];
+    }];
+    
+    // let's use the base URL if a realm was not set
+    NSString *oauthRealm = self.realm;
+    if (!oauthRealm) oauthRealm = [self baseURLforAddress:[self baseURL]];
+    
+    NSString *result = [NSString stringWithFormat:@"OAuth realm=\"%@\",%@", oauthRealm, [headerParams componentsJoinedByString:@","]];
+        
+    return result;
+}
+
+- (void)addGeneratedTimestampAndNonceInto:(NSMutableDictionary *)dictionary {
+    NSUInteger epochTime = (NSUInteger)[[NSDate date] timeIntervalSince1970];
+    NSString *timestamp = [NSString stringWithFormat:@"%d", epochTime];
+    CFUUIDRef theUUID = CFUUIDCreate(NULL);
+    CFStringRef string = CFUUIDCreateString(NULL, theUUID);
+    NSString *nonce = (__bridge NSString *)string;    
+
+    [dictionary setObject:nonce forKey:@"oauth_nonce"];
+    [dictionary setObject:timestamp forKey:@"oauth_timestamp"];
 }
 
 - (NSString *) signatureForBaseString:(NSString *)baseString {
-  NSString *key = [NSString stringWithFormat:@"%@&%@", self.consumerSecret != nil ? URLEncodeString(self.consumerSecret) : @"", self.tokenSecret != nil ? URLEncodeString(self.tokenSecret) : @""];
-  
-  const char *keyBytes = [key cStringUsingEncoding:NSUTF8StringEncoding];
-  const char *baseStringBytes = [baseString cStringUsingEncoding:NSUTF8StringEncoding];
-  unsigned char digestBytes[CC_SHA1_DIGEST_LENGTH];
-
-  CCHmac(kCCHmacAlgSHA1, keyBytes, strlen(keyBytes), baseStringBytes, strlen(baseStringBytes), digestBytes);
-  
-  NSData *digestData = [NSData dataWithBytes:digestBytes length:CC_SHA1_DIGEST_LENGTH];
-  return Base64EncodedStringFromData(digestData); 
+    NSString *key = [NSString stringWithFormat:@"%@&%@", self.consumerSecret != nil ? URLEncodeString(self.consumerSecret) : @"", self.tokenSecret != nil ? URLEncodeString(self.tokenSecret) : @""];
+    
+    const char *keyBytes = [key cStringUsingEncoding:NSUTF8StringEncoding];
+    const char *baseStringBytes = [baseString cStringUsingEncoding:NSUTF8StringEncoding];
+    unsigned char digestBytes[CC_SHA1_DIGEST_LENGTH];
+    
+    CCHmac(kCCHmacAlgSHA1, keyBytes, strlen(keyBytes), baseStringBytes, strlen(baseStringBytes), digestBytes);
+    
+    NSData *digestData = [NSData dataWithBytes:digestBytes length:CC_SHA1_DIGEST_LENGTH];
+    return Base64EncodedStringFromData(digestData); 
 }
 
 - (NSString *) baseURLforAddress:(NSURL *)url {
