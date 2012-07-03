@@ -202,7 +202,8 @@ static const NSString *kOAuthVersion1_0 = @"1.0";
     NSString *timestamp = [NSString stringWithFormat:@"%d", epochTime];
     CFUUIDRef theUUID = CFUUIDCreate(NULL);
     CFStringRef string = CFUUIDCreateString(NULL, theUUID);
-    NSString *nonce = (__bridge_transfer NSString *)string;    
+    NSString *nonce = (__bridge_transfer NSString *)string;
+    CFRelease(theUUID);
 
     [dictionary setObject:nonce forKey:@"oauth_nonce"];
     [dictionary setObject:timestamp forKey:@"oauth_timestamp"];
@@ -234,8 +235,7 @@ static const NSString *kOAuthVersion1_0 = @"1.0";
         hostString = [NSString stringWithFormat:@"%@:%@", [[url host] lowercaseString], [url port]];
     }
     
-    NSString *pathString = (__bridge NSString *)CFURLCopyPath((__bridge CFURLRef)[url absoluteURL]);
-    return [NSString stringWithFormat:@"%@://%@%@", [[url scheme] lowercaseString], hostString, pathString];
+    return [NSString stringWithFormat:@"%@://%@%@", [[url scheme] lowercaseString], hostString, [[url absoluteURL] path]];
 }
 
 @end
