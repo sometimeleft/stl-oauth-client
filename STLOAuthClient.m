@@ -138,10 +138,10 @@ static const NSString *kOAuthVersion1_0 = @"1.0";
   // UTF-8/URL Encoding of all parameters (oauth + request) 
   NSMutableDictionary *params = [NSMutableDictionary dictionaryWithCapacity:[parameters count] + [oauthParams count]];
   [parameters enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSString *obj, BOOL *stop) {
-    [params setObject:URLEncodeString(obj) forKey:URLEncodeString(key)];
+    [params setObject:URLEncodeString(obj.description) forKey:URLEncodeString(key)];
   }];
   [oauthParams enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSString *obj, BOOL *stop) {
-    [params setObject:URLEncodeString(obj) forKey:URLEncodeString(key)];
+    [params setObject:URLEncodeString(obj.description) forKey:URLEncodeString(key)];
   }];
   
   // sorting parameters
