@@ -197,51 +197,14 @@ static const NSString *kOAuthVersion1_0 = @"1.0";
     return result;
 }
 
-//
-//  The following method is based on code from :
-//
-//  ASIHTTPRequest+OAuth.m
-//
-//  Created by Scott James Remnant on 6/1/11.
-//  Copyright 2011 Scott James Remnant <scott@netsplit.com>. All rights reserved.
-//
-- (void) addGeneratedTimestampAndNonceInto:(NSMutableDictionary *)dictionary {
-    static time_t last_timestamp = -1;
-    static NSMutableSet *nonceHistory = nil;
-    
-    // Make sure we never send the same timestamp and nonce
-    if (!nonceHistory)
-        nonceHistory = [[NSMutableSet alloc] init];
-    
-    struct timeval tv;
-    NSString *timestamp, *nonce;
-    do {
-        // Get the time of day, for both the timestamp and the random seed
-        gettimeofday(&tv, NULL);
-        
-        // Generate a random alphanumeric character sequence for the nonce
-        char nonceBytes[16];
-        srandom(tv.tv_sec | tv.tv_usec);
-        for (int i = 0; i < 16; i++) {
-            int byte = random() % 62;
-            if (byte < 26)
-                nonceBytes[i] = 'a' + byte;
-            else if (byte < 52)
-                nonceBytes[i] = 'A' + byte - 26;
-            else
-                nonceBytes[i] = '0' + byte - 52;
-        }
-        
-        timestamp = [NSString stringWithFormat:@"%d", tv.tv_sec];
-        nonce = [NSString stringWithFormat:@"%.16s", nonceBytes];
-    } while ((tv.tv_sec == last_timestamp) && [nonceHistory containsObject:nonce]);
-    
-    if (tv.tv_sec != last_timestamp) {
-        last_timestamp = tv.tv_sec;
-        [nonceHistory removeAllObjects];
-    }
-    [nonceHistory addObject:nonce];
-    
+- (void)addGeneratedTimestampAndNonceInto:(NSMutableDictionary *)dictionary {
+    NSUInteger epochTime = (NSUInteger)[[NSDate date] timeIntervalSince1970];
+    NSString *timestamp = [NSString stringWithFormat:@"%d", epochTime];
+    CFUUIDRef theUUID = CFUUIDCreate(NULL);
+    CFStringRef string = CFUUIDCreateString(NULL, theUUID);
+    NSString *nonce = (__bridge_transfer NSString *)string;
+    CFRelease(theUUID);
+
     [dictionary setObject:nonce forKey:@"oauth_nonce"];
     [dictionary setObject:timestamp forKey:@"oauth_timestamp"];
 }
@@ -272,8 +235,7 @@ static const NSString *kOAuthVersion1_0 = @"1.0";
         hostString = [NSString stringWithFormat:@"%@:%@", [[url host] lowercaseString], [url port]];
     }
     
-    NSString *pathString = (__bridge NSString *)CFURLCopyPath((__bridge CFURLRef)[url absoluteURL]);
-    return [NSString stringWithFormat:@"%@://%@%@", [[url scheme] lowercaseString], hostString, pathString];
+    return [NSString stringWithFormat:@"%@://%@%@", [[url scheme] lowercaseString], hostString, [[url absoluteURL] path]];
 }
 
 @end
@@ -322,7 +284,7 @@ static NSString *URLEncodeString(NSString *string) {
 static NSString * Base64EncodedStringFromData(NSData *data) {
     NSUInteger length = [data length];
     NSMutableData *mutableData = [NSMutableData dataWithLength:((length + 2) / 3) * 4];
-    
+
     uint8_t *input = (uint8_t *)[data bytes];
     uint8_t *output = (uint8_t *)[mutableData mutableBytes];
     
